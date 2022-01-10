@@ -1,77 +1,145 @@
-import datetime
+import time
 import json
-import hashlib
-from flask import Flask, jsonify
+from hashlib import sha256
+
+DIFFICULTY_INCREASE_STEP = 1000000
+
+
+class Block:
+    """
+    Block object used to create the chain
+    """
+    def __init__(self, index, proof_number, previous_hash, data, timestamp=None):
+        self.index = index
+        self.proof_number = proof_number
+        self.previous_hash = previous_hash
+        self.data = data
+        self.timestamp = timestamp or time.time()
+
+    @property
+    def compute_hash(self):
+        block_string = json.dumps(self.__dict__, sort_keys=True)
+        return sha256(block_string.encode()).hexdigest()
+
+    def __repr__(self):
+        return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.data} - {self.timestamp}"
 
 
 class Blockchain:
-    def __init__(self):
-        self.chain = []
-        self.create_blockchain(proof=1, previous_hash="0")
+    difficulty = 2
 
-    def create_blockchain(self, proof, previous_hash):
-        block = {
-            'index': len(self.chain) + 1,
-            'timestamp': str(datetime.datetime.now()),
-            'proof': proof,
-            'previous_hash': previous_hash
-        }
+    def __init__(self):
+        # stores all blocks
+        self.chain = []
+        # stores all data about block to be created
+        self.current_data = []
+        self.nodes = set()
+        self.build_genesis()
+
+    def build_genesis(self):
+        self.build_block(proof_number=0, previous_hash=0)
+
+    def build_block(self, proof_number, previous_hash):
+        block = Block(
+            index=len(self.chain),
+            proof_number=proof_number,
+            previous_hash=previous_hash,
+            data=self.current_data
+        )
+        # empty the current_data since it was written
+        self.current_data = []
 
         self.chain.append(block)
         return block
 
-    def get_previous_block(self):
-        last_block = self.chain[-1]
-        return last_block
+    @staticmethod
+    def confirm_validity(block, previous_block):
+        if (
+            previous_block.index + 1 != block.index
+            or previous_block.compute_hash() != block.previous_hash
+            or previous_block.timestamp >= block.timestamp
+            or not Blockchain.verify_proof(block.proof_number, previous_block.proof_no)
+        ):
+            return False
 
-    def proof_of_work(self, previous_proof):
-        # miners proof submitted
-        new_proof = 1
-        # status of proof of work
-        check_proof = False
-        while check_proof is False:
-            # problem and algorithm based off the previous proof and new proof
-            hash_operation = hashlib.sha256(str(new_proof ** 2 - previous_proof ** 2).encode()).hexdigest()
-            # check miners solution to problem, by using miners proof in cryptographic encryption
-            # if miners proof results in 4 leading zero's in the hash operation, then:
-            if hash_operation[:4] == '0000':
-                check_proof = True
-            else:
-                # if miners solution is wrong, give mine another chance until correct
-                new_proof += 1
-        return new_proof
-
-    # generate a hash of an entire block
-    def hash(self, block):
-        encoded_block = json.dumps(block, sort_keys=True).encode()
-        return hashlib.sha256(encoded_block).hexdigest()
-
-    # check if the blockchain is valid
-    def is_chain_valid(self, chain):
-        # get the first block in the chain and it serves as the previous block
-        previous_block = chain[0]
-        # an index of the blocks in the chain for iteration
-        block_index = 1
-        while block_index < len(chain):
-            # get the current block
-            block = chain[block_index]
-            # check if the current block link to previous block has is the same as the hash of the previous block
-            if block["previous_hash"] != self.hash(previous_block):
-                return False
-
-            # get the previous proof from the previous block
-            previous_proof = previous_block['proof']
-
-            # get the current proof from the current block
-            current_proof = block['proof']
-
-            # run the proof data through the algorithm
-            hash_operation = hashlib.sha256(str(current_proof ** 2 - previous_proof ** 2).encode()).hexdigest()
-            # check if hash operation is invalid
-            if hash_operation[:4] != '0000':
-                return False
-            # set the previous block to the current block after running validation on current block
-            previous_block = block
-            block_index += 1
         return True
 
+    def new_data(self, sender, receiver, amount):
+        self.current_data.append({
+            "sender": sender,
+            "receiver": receiver,
+            "amount": amount,
+        })
+        return True
+
+    @property
+    def latest_block(self):
+        return self.chain[-1]
+
+    @staticmethod
+    def proof_of_work(last_proof):
+        proof_no = 0
+        while not Blockchain.verify_proof(proof_no, last_proof):
+            proof_no += 1
+
+        return proof_no
+
+    @staticmethod
+    def verify_proof(last_proof, proof):
+        # verifying the proof: does hash(last_proof, proof) contain {self.difficulty} leading zeros"
+        guess = f'{last_proof}{proof}'.encode()
+        guess_hash = sha256(guess).hexdigest()
+
+        return guess_hash[:Blockchain.difficulty] == "0" * Blockchain.difficulty
+
+    # def block_mining(self, details_miner):
+    #     self.new_data(
+    #         sender="0",  # it implies that this node has created a new block
+    #         receiver=details_miner,
+    #         amount=1,  # creating a new block (or identifying the proof number) is awarded with 1
+    #     )
+    #
+    #     last_block = self.latest_block
+    #     last_proof_no = last_block.proof_no
+    #     proof_no = self.proof_of_work(last_proof_no)
+    #     last_hash = last_block.calculate_hash
+    #
+    #     block = self.build_block(proof_no, last_hash)
+    #     return vars(block)
+    #
+    # def create_node(self, address):
+    #     self.nodes.add(address)
+    #     return True
+    #
+    # @staticmethod
+    # def obtain_block_object(block_data):
+    #     # obtains block object from the block data
+    #
+    #     return Block(
+    #         block_data['index'],
+    #         block_data['proof_no'],
+    #         block_data['prev_hash'],
+    #         block_data['data'],
+    #         timestamp=block_data['timestamp'])
+
+
+blockchain = Blockchain()
+
+print("***Mining fccCoin about to start***")
+print(blockchain.chain)
+
+last_block = blockchain.latest_block
+last_proof_number = last_block.proof_number
+proof_number = blockchain.proof_of_work(last_proof_number)
+
+blockchain.new_data(
+    sender="0",  #it implies that this node has created a new block
+    receiver="Quincy Larson",  #let's send Quincy some coins!
+    amount=1,  #creating a new block (or identifying the proof number) is awarded with 1
+)
+
+last_hash = last_block.compute_hash
+block = blockchain.build_block(proof_number, last_hash)
+
+print("***Mining fccCoin has been successful***")
+print(blockchain.chain)
