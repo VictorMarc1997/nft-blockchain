@@ -32,8 +32,11 @@ class Block:
     def __repr__(self):
         return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.data} - {self.timestamp}"
 
+    def __str__(self):
+        return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.data} - {self.timestamp}"
+
     def __eq__(self, other):
-        return self.__repr__() == other.__repr__()
+        return str(self) == str(other)
 
 
 class Blockchain:
@@ -78,9 +81,18 @@ class Blockchain:
         return True
 
     def build_genesis(self):
-        self.build_block(proof_number=0, previous_hash=0)
+        self.build_block(initial=True)
 
-    def build_block(self, proof_number, previous_hash):
+    def build_block(self, initial=False):
+
+        if initial:
+            proof_number = 0
+            previous_hash = 0
+        else:
+            previous_proof_number = self.latest_block.proof_number
+            previous_hash = self.latest_block.compute_hash
+            proof_number = Blockchain.proof_of_work(previous_proof_number)
+
         block = Block(
             index=len(self.chain),
             proof_number=proof_number,
@@ -101,35 +113,42 @@ class Blockchain:
             receiver: ""
             amount: ""
         }
-        :return: True if a block was built, False otherwise
+        :return: (block_built_flag, the_block)
         """
         sender = transaction.get("sender")
-        if not sender or sender not in self.get_all_addresses:
+        receiver = transaction.get("receiver")
+        amount = transaction.get("amount")
+
+        if not sender or sender not in self.all_addresses or sender == receiver:
+            return False, None
+
+        if sender != "0" and self.get_wallet(sender) < amount:
             return False, None
 
         data = {
-            "sender": transaction.get("sender"),
-            "receiver": transaction.get("receiver"),
-            "amount": transaction.get("amount"),
+            "sender": sender,
+            "receiver": receiver,
+            "amount": amount,
         }
         self.current_data.append(data)
 
         if len(self.current_data) == TRANSACTIONS_PER_BLOCK:
-            last_proof_number = self.get_latest_block.proof_number
-            last_hash = self.get_latest_block.compute_hash
-
-            new_proof_number = Blockchain.proof_of_work(last_proof_number)
-            return True, self.build_block(new_proof_number, last_hash)
+            return True, self.build_block()
 
         return True, None
 
     @property
-    def get_latest_block(self):
+    def latest_block(self):
         return self.chain[-1]
 
     @property
-    def get_all_addresses(self):
+    def all_addresses(self):
         addresses = set("0")
+
+        for data in self.current_data:
+            addresses.add(data.get("sender"))
+            addresses.add(data.get("receiver"))
+
         for block in self.chain:
             for data in block.data:
                 addresses.add(data.get("sender"))
@@ -191,3 +210,22 @@ class Blockchain:
                 Blockchain.add_block_to_chain(chain, block)
 
         return chain
+
+    def get_wallet(self, address):
+        coin_amount = 0
+
+        for data in self.current_data:
+            if address == data["sender"]:
+                coin_amount -= data["amount"]
+            elif address == data["receiver"]:
+                coin_amount += data["amount"]
+
+        for block in self.chain:
+            for data in block.data:
+                if address == data["sender"]:
+                    coin_amount -= data["amount"]
+                elif address == data["receiver"]:
+                    coin_amount += data["amount"]
+
+        return coin_amount
+

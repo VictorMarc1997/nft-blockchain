@@ -36,7 +36,7 @@ def save_blockchain():
 def list_addresses():
     global current_blockchain
 
-    addresses = current_blockchain.get_all_addresses - set("0")
+    addresses = current_blockchain.all_addresses - set("0")
 
     return jsonify({"addresses": list(addresses)})
 
@@ -72,7 +72,7 @@ def make_transaction():
 
     return jsonify({
         "success": True,
-        "new_block": new_block,
+        "new_block": str(new_block),
     })
 
 
@@ -80,16 +80,23 @@ def make_transaction():
 def create_address():
     global current_blockchain
     request_data = request.get_json()
-    if not request_data.get("address"):
+    address = request_data.get("address")
+
+    if not address:
         return jsonify({
             "success": False,
             "error": "Address not provided",
         })
+    if address in current_blockchain.all_addresses:
+        return jsonify({
+            "success": False,
+            "error": "Address already exists",
+        })
 
     data = {
         "sender": "0",
-        "receiver": request_data["address"],
-        "amount": "0"
+        "receiver": address,
+        "amount": 100
     }
     success, new_block = current_blockchain.new_transaction(data)
 
@@ -101,7 +108,44 @@ def create_address():
 
     return jsonify({
         "success": True,
-        "new_block": new_block,
+        "new_block": str(new_block),
+    })
+
+
+@app.route("/mine_block", methods=["GET", "POST"])
+def mine_block():
+    global current_blockchain
+    new_block = current_blockchain.build_block()
+
+    return jsonify({
+        "success": True,
+        "new_block": str(new_block),
+    })
+
+
+@app.route("/get_wallet", methods=["POST"])
+def get_wallet():
+    global current_blockchain
+    request_data = request.get_json()
+    address = request_data.get("address")
+
+    if not address:
+        return jsonify({
+            "success": False,
+            "error": "Address not provided",
+        })
+
+    if address not in current_blockchain.all_addresses:
+        return jsonify({
+            "success": False,
+            "error": "Address does not exists",
+        })
+
+    amount = current_blockchain.get_wallet(address)
+
+    return jsonify({
+        "success": True,
+        "amount": amount,
     })
 
 
