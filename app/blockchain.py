@@ -145,10 +145,6 @@ class Blockchain:
     def all_addresses(self):
         addresses = set("0")
 
-        for data in self.current_data:
-            addresses.add(data.get("sender"))
-            addresses.add(data.get("receiver"))
-
         for block in self.chain:
             for data in block.data:
                 addresses.add(data.get("sender"))
@@ -213,12 +209,6 @@ class Blockchain:
 
     def get_wallet(self, address):
         coin_amount = 0
-
-        for data in self.current_data:
-            if address == data["sender"]:
-                coin_amount -= data["amount"]
-            elif address == data["receiver"]:
-                coin_amount += data["amount"]
 
         for block in self.chain:
             for data in block.data:
