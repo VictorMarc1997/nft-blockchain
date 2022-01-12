@@ -219,3 +219,11 @@ class Blockchain:
 
         return coin_amount
 
+    def get_total_transactions(self):
+        count = 0
+
+        for block in self.chain:
+            count += len(block.data)
+
+        return count
+

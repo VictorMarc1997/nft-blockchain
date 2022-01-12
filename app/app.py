@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from blockchain import Blockchain
 
 app = Flask(__name__)
+CORS(app)
 
 current_blockchain = Blockchain()
 
@@ -38,7 +40,19 @@ def list_addresses():
 
     addresses = current_blockchain.all_addresses - set("0")
 
-    return jsonify({"addresses": list(addresses)})
+    return jsonify({
+        "addresses": list(addresses),
+        "total": len(list(addresses)),
+    })
+
+
+@app.route("/total_transactions", methods=["GET"])
+def total_transactions():
+    global current_blockchain
+
+    count = current_blockchain.get_total_transactions()
+
+    return jsonify({"result": count})
 
 
 @app.route("/make_transaction", methods=["POST"])
