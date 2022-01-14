@@ -29,6 +29,16 @@ class Block:
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=True, indent=4)
 
+    def to_dict(self):
+        return {
+            "index": self.index,
+            "proof_number": self.proof_number,
+            "current_hash": self.compute_hash,
+            "previous_hash": self.previous_hash,
+            "data": self.data,
+            "timestamp": int(self.timestamp)*1000,
+        }
+
     def __repr__(self):
         return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.data} - {self.timestamp}"
 
@@ -119,7 +129,12 @@ class Blockchain:
         receiver = transaction.get("receiver")
         amount = transaction.get("amount")
 
-        if not sender or sender not in self.all_addresses or sender == receiver:
+        if (
+            not sender
+            or not receiver
+            or sender not in self.all_addresses
+            or sender == receiver
+        ):
             return False, None
 
         if sender != "0" and self.get_wallet(sender) < amount:
@@ -136,6 +151,10 @@ class Blockchain:
             return True, self.build_block()
 
         return True, None
+
+    @property
+    def length(self):
+        return len(self.chain)
 
     @property
     def latest_block(self):
@@ -210,6 +229,9 @@ class Blockchain:
     def get_wallet(self, address):
         coin_amount = 0
 
+        if address not in self.all_addresses:
+            return None
+
         for block in self.chain:
             for data in block.data:
                 if address == data["sender"]:
@@ -226,4 +248,22 @@ class Blockchain:
             count += len(block.data)
 
         return count
+
+    def get_blocks(self, start=0, count=None):
+        blocks = []
+        if count is None:
+            count = len(self.chain)
+
+        if start >= len(self.chain) or count > len(self.chain) - start:
+            return None
+
+        c = 1
+
+        for index, block in enumerate(self.chain):
+
+            if index >= start and c <= count:
+                blocks.append(block.to_dict())
+                c += 1
+
+        return blocks
 
