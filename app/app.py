@@ -35,7 +35,7 @@ def load_user(user_id):
 def load_user_from_request(req):
     api_key = req.headers.get('Authorization')
     if api_key:
-        api_key = api_key.replace('Basic ', '', 1)
+        api_key = api_key.replace('Bearer ', '', 1)
         try:
             api_key = str(base64.b64decode(api_key), "utf-8")
         except TypeError:
@@ -70,6 +70,7 @@ def signup():
 
     user = User(email=email)
     user.set_password(password)
+    user.set_api_key()
     user.create_address(current_blockchain)
     db.session.add(user)
     db.session.commit()
@@ -149,13 +150,49 @@ def list_addresses():
     })
 
 
+@app.route("/list_nfts", methods=["GET"])
+def list_nfts():
+    global current_blockchain
+
+    assets = current_blockchain.all_assets
+    nfts = NFT.query.all()
+
+    result = []
+    for nft in nfts:
+        if nft.token in assets:
+            result.append(nft.to_json())
+
+    return jsonify({
+        "nfts": result,
+        "total": len(result),
+    })
+
+
+@app.route("/search_nft", methods=["POST"])
+def search_nft():
+    global current_blockchain
+    data = request.get_json()
+    token = data.get("token")
+
+    nft = NFT.query.filter_by(token=token).first()
+
+    if not nft:
+        return jsonify({
+            "success": False,
+            "reason": "NFT does not exist",
+        })
+
+    return jsonify({
+        "success": True,
+        "nft": nft.to_json(),
+    })
+
+
 @app.route("/total_transactions", methods=["GET"])
 def total_transactions():
     global current_blockchain
 
-    count = current_blockchain.get_total_transactions()
-
-    return jsonify({"result": count})
+    return jsonify({"result": current_blockchain.total_transactions})
 
 
 @app.route("/make_transaction", methods=["POST"])
@@ -165,7 +202,8 @@ def make_transaction():
     data = request.get_json()
     sender = current_user.address
     receiver = data.get("receiver")
-    amount = data.get("amount")
+    amount = data.get("amount", 0)
+    asset = data.get("asset")
 
     if current_user.admin:
         sender = data.get("sender", sender)
@@ -185,6 +223,7 @@ def make_transaction():
         "sender": sender,
         "receiver": receiver,
         "amount": amount,
+        "asset": asset,
     }
 
     success, new_block = current_blockchain.new_transaction(info)
@@ -263,9 +302,9 @@ def get_wallet():
                 "success": False,
                 "error": "Address does not exists",
             })
-        amount = current_blockchain.get_wallet(address)
+        amount, assets = current_blockchain.get_wallet(address)
     else:
-        amount = current_blockchain.get_wallet(current_user.address)
+        amount, assets = current_blockchain.get_wallet(current_user.address)
 
     if amount is None:
         return jsonify({
@@ -276,6 +315,7 @@ def get_wallet():
     return jsonify({
         "success": True,
         "amount": amount,
+        "assets": list(assets),
     })
 
 
@@ -297,6 +337,54 @@ def get_blocks():
     return jsonify({
         "blocks": blocks,
         "next_page": page_id,
+    })
+
+
+@app.route("/create_asset", methods=["POST"])
+@login_required
+def create_asset():
+    global current_blockchain
+    request_data = request.get_json()
+    image_str = request_data.get("image")
+
+    if not image_str:
+        return jsonify({
+            "success": False,
+            "reason": "NFT not provided",
+        })
+
+    # check if nft already exists
+    nft = NFT.query.filter_by(image=image_str).first()
+    if nft:
+        return jsonify({
+            "status": 401,
+            "reason": "NFT already exists"
+        })
+
+    nft = NFT(image=image_str)
+    nft.create_token()
+    db.session.add(nft)
+    db.session.commit()
+
+    info = {
+        "sender": "0",
+        "receiver": current_user.address,
+        "amount": 0,
+        "asset": nft.token,
+    }
+
+    success, new_block = current_blockchain.new_transaction(info)
+    if success and not new_block:
+        current_blockchain.build_block()
+    else:
+        return jsonify({
+            "success": False,
+            "reason": "Failed to add to blockchain",
+        })
+
+    return jsonify({
+        "success": True,
+        "token": nft.token
     })
 
 

@@ -12,7 +12,8 @@ class User(db.Model):
     email = db.Column(db.String(80), unique=True)
     password = db.Column(db.String())
     address = db.Column(db.String(), default=None)
-    admin = db.Column(db.Boolean, default=False)
+    admin = db.Column(db.Boolean(), default=False)
+    api_key = db.Column(db.String(), nullable=False)
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
@@ -34,9 +35,8 @@ class User(db.Model):
 
             self.address = address
 
-    @property
-    def api_key(self):
-        return f"{self.email}:{self.address}"
+    def set_api_key(self):
+        self.api_key = f"{self.email}:{self.address}"
 
     def to_json(self):
         return {

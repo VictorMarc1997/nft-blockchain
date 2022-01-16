@@ -40,10 +40,10 @@ class Block:
         }
 
     def __repr__(self):
-        return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.data} - {self.timestamp}"
+        return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.timestamp}"
 
     def __str__(self):
-        return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.data} - {self.timestamp}"
+        return f"{self.index} - {self.proof_number} - {self.previous_hash} - {self.timestamp}"
 
     def __eq__(self, other):
         return str(self) == str(other)
@@ -127,23 +127,38 @@ class Blockchain:
         """
         sender = transaction.get("sender")
         receiver = transaction.get("receiver")
-        amount = transaction.get("amount")
+        amount = transaction.get("amount", 0)
+        asset = transaction.get("asset")
 
         if (
             not sender
             or not receiver
             or sender not in self.all_addresses
             or sender == receiver
+            or (not amount and not asset)
         ):
             return False, None
 
-        if sender != "0" and self.get_wallet(sender) < amount:
+        if amount < 0:
+            return False, None
+
+        if sender != "0":
+            sender_amount, sender_assets = self.get_wallet(sender)
+
+            if sender_amount < amount:
+                return False, None
+
+            if asset and asset not in sender_assets:
+                return False, None
+
+        if asset and amount > 0:
             return False, None
 
         data = {
             "sender": sender,
             "receiver": receiver,
             "amount": amount,
+            "asset": asset,
         }
         self.current_data.append(data)
 
@@ -170,6 +185,26 @@ class Blockchain:
                 addresses.add(data.get("receiver"))
 
         return addresses
+
+    @property
+    def all_assets(self):
+        assets = set()
+
+        for block in self.chain:
+            for data in block.data:
+                if data.get("asset"):
+                    assets.add(data.get("asset"))
+
+        return assets
+
+    @property
+    def total_transactions(self):
+        count = 0
+
+        for block in self.chain:
+            count += len(block.data)
+
+        return count
 
     @staticmethod
     def add_block_to_chain(chain, block):
@@ -228,6 +263,7 @@ class Blockchain:
 
     def get_wallet(self, address):
         coin_amount = 0
+        assets = set()
 
         if address not in self.all_addresses:
             return None
@@ -236,18 +272,15 @@ class Blockchain:
             for data in block.data:
                 if address == data["sender"]:
                     coin_amount -= data["amount"]
+                    if data.get("asset"):
+                        assets.remove(data.get("asset"))
+
                 elif address == data["receiver"]:
                     coin_amount += data["amount"]
+                    if data.get("asset"):
+                        assets.add(data.get("asset"))
 
-        return coin_amount
-
-    def get_total_transactions(self):
-        count = 0
-
-        for block in self.chain:
-            count += len(block.data)
-
-        return count
+        return coin_amount, assets
 
     def get_blocks(self, start=0, count=None):
         blocks = []
