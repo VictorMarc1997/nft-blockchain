@@ -3,7 +3,6 @@
 This is a backend developed using flask and Python 3.10
 
 ## Get started
-___
 
 Install requirements:
 
