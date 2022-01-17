@@ -159,6 +159,7 @@ class Blockchain:
             "receiver": receiver,
             "amount": amount,
             "asset": asset,
+            "timestamp": time.time(),
         }
         self.current_data.append(data)
 
@@ -261,6 +262,19 @@ class Blockchain:
 
         return chain
 
+    def get_transactions(self, address):
+        transactions = []
+        if address not in self.all_addresses:
+            return None
+
+        for block in self.chain:
+            for data in block.data:
+                if address == data["sender"] or address == data["receiver"]:
+                    trans = {**data, "timestamp": int(data["timestamp"]) * 1000}
+                    transactions.append(trans)
+
+        return transactions
+
     def get_wallet(self, address):
         coin_amount = 0
         assets = set()
@@ -300,3 +314,10 @@ class Blockchain:
 
         return blocks
 
+    def get_owner(self, token):
+        for block in self.chain:
+            for data in block.data:
+                if token == data["asset"]:
+                    return data["receiver"]
+
+        return None

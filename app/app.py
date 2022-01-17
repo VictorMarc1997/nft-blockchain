@@ -1,4 +1,5 @@
 import base64
+import requests
 from flask import Flask, request, jsonify
 from flask_login import LoginManager, login_required, login_user, logout_user, current_user
 from flask_cors import CORS
@@ -36,6 +37,8 @@ def load_user_from_request(req):
     api_key = req.headers.get('Authorization')
     if api_key:
         api_key = api_key.replace('Bearer ', '', 1)
+        if api_key == "null":
+            return None
         try:
             api_key = str(base64.b64decode(api_key), "utf-8")
         except TypeError:
@@ -160,7 +163,7 @@ def list_nfts():
     result = []
     for nft in nfts:
         if nft.token in assets:
-            result.append(nft.to_json())
+            result.append(nft.to_json(current_blockchain))
 
     return jsonify({
         "nfts": result,
@@ -184,7 +187,7 @@ def search_nft():
 
     return jsonify({
         "success": True,
-        "nft": nft.to_json(),
+        "nft": nft.to_json(current_blockchain),
     })
 
 
@@ -195,6 +198,27 @@ def total_transactions():
     return jsonify({"result": current_blockchain.total_transactions})
 
 
+@app.route("/list_transactions", methods=["POST"])
+def list_transactions():
+    global current_blockchain
+    data = request.get_json()
+    address = data.get("address")
+    if address is None or address not in current_blockchain.all_addresses:
+        return jsonify({"success": False})
+
+    transactions = current_blockchain.get_transactions(address)
+
+    for tr in transactions:
+        if tr.get("asset"):
+            params = {
+                "token": tr["asset"]
+            }
+            response = requests.post(url="http://127.0.0.1:5000/search_nft", json=params)
+            tr["nft"] = response.json()["nft"]
+
+    return jsonify({"success": True, "result": transactions})
+
+
 @app.route("/make_transaction", methods=["POST"])
 @login_required
 def make_transaction():
@@ -202,7 +226,7 @@ def make_transaction():
     data = request.get_json()
     sender = current_user.address
     receiver = data.get("receiver")
-    amount = data.get("amount", 0)
+    amount = data.get("amount", 0) or 0
     asset = data.get("asset")
 
     if current_user.admin:
@@ -213,7 +237,7 @@ def make_transaction():
             "success": False,
             "error": "Receiver not provided",
         })
-    elif not amount or not isinstance(amount, int):
+    elif amount is None or not isinstance(amount, int):
         return jsonify({
             "success": False,
             "error": "Amount not provided",

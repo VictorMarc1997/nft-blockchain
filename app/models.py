@@ -71,10 +71,11 @@ class NFT(db.Model):
         if self.token is None:
             self.token = f"0x{secrets.token_hex(32)}"
 
-    def to_json(self):
+    def to_json(self, blockchain):
         return {
             "image": self.image,
             "token": self.token,
+            "owner": blockchain.get_owner(self.token)
         }
 
     def __repr__(self):
